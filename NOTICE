@@ -1,0 +1,13 @@
+Cindy Web
+Copyright 2026 DevComputaria contributors
+
+This product is a web-first derivative inspired by the Cindy client:
+https://github.com/makecindy/cindy
+Copyright its respective contributors, licensed under the Apache License 2.0.
+
+Static application analysis was performed with REA:
+https://github.com/morluto/rea
+Copyright its respective contributors, licensed under the MIT License.
+
+No Cindy binary artifacts, credentials, user data, or proprietary service code
+are included in this repository.
