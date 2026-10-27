@@ -27,7 +27,8 @@ interface SidebarProps {
 export function Sidebar(props: SidebarProps) {
   const [query, setQuery] = useState('');
   const visibleTasks = useMemo(
-    () => props.tasks.filter((task) => !task.archived && task.title.toLowerCase().includes(query.toLowerCase())),
+    () =>
+      props.tasks.filter((task) => !task.archived && task.title.toLowerCase().includes(query.toLowerCase())),
     [props.tasks, query],
   );
 
@@ -64,9 +65,15 @@ export function Sidebar(props: SidebarProps) {
       </button>
 
       <nav className="main-nav" aria-label="Seções">
-        <button className="nav-item selected"><Sparkles size={16} /> Tarefas</button>
-        <button className="nav-item"><Bot size={16} /> Parceiros <span className="soon">em breve</span></button>
-        <button className="nav-item"><FileClock size={16} /> Agendadas <span className="soon">em breve</span></button>
+        <button className="nav-item selected">
+          <Sparkles size={16} /> Tarefas
+        </button>
+        <button className="nav-item">
+          <Bot size={16} /> Parceiros <span className="soon">em breve</span>
+        </button>
+        <button className="nav-item">
+          <FileClock size={16} /> Agendadas <span className="soon">em breve</span>
+        </button>
       </nav>
 
       <div className="sidebar-heading">
@@ -75,7 +82,11 @@ export function Sidebar(props: SidebarProps) {
       </div>
       <label className="sidebar-search">
         <Search size={14} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar tarefas" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Buscar tarefas"
+        />
       </label>
 
       <div className="task-list">
@@ -86,7 +97,9 @@ export function Sidebar(props: SidebarProps) {
             onClick={() => props.onSelect(task.id)}
           >
             <span className="task-title">{task.title}</span>
-            <span className="task-project"><Folder size={12} /> {task.project}</span>
+            <span className="task-project">
+              <Folder size={12} /> {task.project}
+            </span>
           </button>
         ))}
         {!visibleTasks.length && <p className="empty-list">Nenhuma tarefa por aqui.</p>}
@@ -95,7 +108,10 @@ export function Sidebar(props: SidebarProps) {
       <div className="sidebar-footer">
         <button className="profile-button" onClick={props.onSettings}>
           <span className="avatar">V</span>
-          <span><strong>Seu espaço</strong><small>Dados locais</small></span>
+          <span>
+            <strong>Seu espaço</strong>
+            <small>Dados locais</small>
+          </span>
           <Settings size={16} className="push-right" />
         </button>
         <button className="back-source" title="Projeto derivado do Cindy Desktop">

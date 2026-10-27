@@ -15,8 +15,17 @@ const commands: Record<AgentKind, string> = {
 };
 
 export function agentCatalog(): AgentDescriptor[] {
-  return ([['codex', 'Codex'], ['claude', 'Claude Code'], ['hermes', 'Hermes']] as const).map(([id, label]) => ({
-    id, label, command: commands[id], available: commandAvailable(commands[id]),
+  return (
+    [
+      ['codex', 'Codex'],
+      ['claude', 'Claude Code'],
+      ['hermes', 'Hermes'],
+    ] as const
+  ).map(([id, label]) => ({
+    id,
+    label,
+    command: commands[id],
+    available: commandAvailable(commands[id]),
   }));
 }
 
@@ -26,18 +35,30 @@ function commandAvailable(command: string): boolean {
 }
 
 export function buildAgentArguments(agent: AgentKind, prompt: string, sessionId: string | null): string[] {
-  if (agent === 'codex') return sessionId
-    ? ['exec', 'resume', '--json', '--skip-git-repo-check', sessionId, prompt]
-    : ['exec', '--json', '--skip-git-repo-check', prompt];
-  if (agent === 'claude') return sessionId
-    ? ['-p', '--resume', sessionId, '--verbose', '--output-format', 'stream-json', prompt]
-    : ['-p', '--verbose', '--output-format', 'stream-json', prompt];
+  if (agent === 'codex')
+    return sessionId
+      ? ['exec', 'resume', '--json', '--skip-git-repo-check', sessionId, prompt]
+      : ['exec', '--json', '--skip-git-repo-check', prompt];
+  if (agent === 'claude')
+    return sessionId
+      ? ['-p', '--resume', sessionId, '--verbose', '--output-format', 'stream-json', prompt]
+      : ['-p', '--verbose', '--output-format', 'stream-json', prompt];
   const template = process.env.CINDY_HERMES_ARGS;
-  if (template) return JSON.parse(template).map((part: unknown) => String(part).replaceAll('{prompt}', prompt).replaceAll('{session}', sessionId ?? ''));
+  if (template)
+    return JSON.parse(template).map((part: unknown) =>
+      String(part)
+        .replaceAll('{prompt}', prompt)
+        .replaceAll('{session}', sessionId ?? ''),
+    );
   return ['chat', '--prompt', prompt];
 }
 
-export function startAgent(agent: AgentKind, cwd: string, prompt: string, sessionId: string | null): ChildProcessWithoutNullStreams {
+export function startAgent(
+  agent: AgentKind,
+  cwd: string,
+  prompt: string,
+  sessionId: string | null,
+): ChildProcessWithoutNullStreams {
   const child = spawn(commands[agent], buildAgentArguments(agent, prompt, sessionId), {
     cwd,
     shell: false,
@@ -56,7 +77,8 @@ export function parseAgentLine(agent: AgentKind, line: string): string | null {
     const event = JSON.parse(trimmed) as Record<string, unknown>;
     if (agent === 'codex') {
       const item = event.item as Record<string, unknown> | undefined;
-      if (event.type === 'item.completed' && item?.type === 'agent_message' && typeof item.text === 'string') return item.text;
+      if (event.type === 'item.completed' && item?.type === 'agent_message' && typeof item.text === 'string')
+        return item.text;
       if (event.type === 'error' && typeof event.message === 'string') return `\n[Codex] ${event.message}`;
       return null;
     }
@@ -64,7 +86,10 @@ export function parseAgentLine(agent: AgentKind, line: string): string | null {
       if (event.type === 'result' && typeof event.result === 'string') return event.result;
       const message = event.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
       if (event.type === 'assistant' && Array.isArray(message?.content)) {
-        return message.content.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('');
+        return message.content
+          .filter((block) => block.type === 'text')
+          .map((block) => block.text ?? '')
+          .join('');
       }
       return null;
     }
@@ -79,9 +104,12 @@ export function parseAgentLine(agent: AgentKind, line: string): string | null {
 export function parseAgentSessionId(agent: AgentKind, line: string): string | null {
   try {
     const event = JSON.parse(line) as Record<string, unknown>;
-    if (agent === 'codex' && event.type === 'thread.started' && typeof event.thread_id === 'string') return event.thread_id;
+    if (agent === 'codex' && event.type === 'thread.started' && typeof event.thread_id === 'string')
+      return event.thread_id;
     if (agent === 'claude' && typeof event.session_id === 'string') return event.session_id;
     if (agent === 'hermes' && typeof event.session_id === 'string') return event.session_id;
-  } catch { /* Plain text output has no session identity. */ }
+  } catch {
+    /* Plain text output has no session identity. */
+  }
   return null;
 }

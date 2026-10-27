@@ -32,7 +32,10 @@ export function Composer({ busy, cwd, agent, onCwd, onSend, onStop }: ComposerPr
             {attachments.map((file) => (
               <span className="attachment" key={file.id}>
                 <FileText size={13} /> {file.name}
-                <button onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))} aria-label={`Remover ${file.name}`}>
+                <button
+                  onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))}
+                  aria-label={`Remover ${file.name}`}
+                >
                   <X size={12} />
                 </button>
               </span>
@@ -68,17 +71,30 @@ export function Composer({ busy, cwd, agent, onCwd, onSend, onStop }: ComposerPr
           <button className="tool-button" onClick={() => fileInput.current?.click()} title="Anexar arquivos">
             <Paperclip size={16} />
           </button>
-          <button className="project-pill" onClick={() => {
-            const next = window.prompt('Caminho absoluto da pasta de trabalho', cwd)?.trim();
-            if (next) onCwd(next);
-          }} title={cwd}>
+          <button
+            className="project-pill"
+            onClick={() => {
+              const next = window.prompt('Caminho absoluto da pasta de trabalho', cwd)?.trim();
+              if (next) onCwd(next);
+            }}
+            title={cwd}
+          >
             <FolderOpen size={14} /> {cwd}
           </button>
           <span className="model-label">{agent}</span>
           {busy ? (
-            <button className="send-button stop" onClick={onStop} aria-label="Interromper resposta"><Square size={13} fill="currentColor" /></button>
+            <button className="send-button stop" onClick={onStop} aria-label="Interromper resposta">
+              <Square size={13} fill="currentColor" />
+            </button>
           ) : (
-            <button className="send-button" onClick={submit} disabled={!text.trim() && !attachments.length} aria-label="Enviar"><ArrowUp size={17} /></button>
+            <button
+              className="send-button"
+              onClick={submit}
+              disabled={!text.trim() && !attachments.length}
+              aria-label="Enviar"
+            >
+              <ArrowUp size={17} />
+            </button>
           )}
         </div>
       </div>

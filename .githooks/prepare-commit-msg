@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+message_file="$1"
+source_kind="${2:-}"
+
+[ "$source_kind" = "merge" ] && exit 0
+
+name="$(git config user.name)"
+email="$(git config user.email)"
+trailer="Signed-off-by: $name <$email>"
+
+git interpret-trailers --if-exists doNothing --if-missing add \
+  --trailer "$trailer" --in-place "$message_file"

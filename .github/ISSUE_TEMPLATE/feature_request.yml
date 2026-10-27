@@ -1,0 +1,24 @@
+name: Feature request
+description: Proponha uma capacidade ou melhoria.
+title: '[Feature] '
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: Que trabalho local está difícil hoje?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta
+      description: Descreva o fluxo e o resultado esperado.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Impacto arquitetural
+      description: Browser, runtime, agente, persistência e segurança afetados.

@@ -18,13 +18,23 @@ export function Welcome({ onNew }: WelcomeProps) {
         <div className="welcome-mark">C</div>
         <h1>O que vamos realizar?</h1>
         <p>Comece uma tarefa, anexe seus arquivos e trabalhe com seu modelo preferido.</p>
-        <button className="welcome-new" onClick={() => onNew()}><span>Começar uma nova tarefa</span><ArrowRight size={18} /></button>
+        <button className="welcome-new" onClick={() => onNew()}>
+          <span>Começar uma nova tarefa</span>
+          <ArrowRight size={18} />
+        </button>
         <div className="suggestion-grid">
           {suggestions.map(({ icon: Icon, title, text }) => (
-            <button key={title} onClick={() => onNew(text)}><Icon size={18} /><strong>{title}</strong><span>{text}</span></button>
+            <button key={title} onClick={() => onNew(text)}>
+              <Icon size={18} />
+              <strong>{title}</strong>
+              <span>{text}</span>
+            </button>
           ))}
         </div>
-        <div className="browser-capabilities"><FolderOpen size={15} /><span>Arquivos e projetos permanecem no seu navegador.</span></div>
+        <div className="browser-capabilities">
+          <FolderOpen size={15} />
+          <span>Arquivos e projetos permanecem no seu navegador.</span>
+        </div>
       </div>
     </main>
   );

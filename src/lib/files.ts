@@ -5,7 +5,9 @@ const MAX_TEXT_BYTES = 250_000;
 export async function filesToAttachments(files: FileList | File[]): Promise<Attachment[]> {
   return Promise.all(
     Array.from(files).map(async (file) => {
-      const isText = file.type.startsWith('text/') || /\.(md|json|js|jsx|ts|tsx|css|html|py|go|rs|java|yaml|yml|toml|sql)$/i.test(file.name);
+      const isText =
+        file.type.startsWith('text/') ||
+        /\.(md|json|js|jsx|ts|tsx|css|html|py|go|rs|java|yaml|yml|toml|sql)$/i.test(file.name);
       return {
         id: crypto.randomUUID(),
         name: file.name,

@@ -40,5 +40,16 @@ export interface Preferences {
   displayName: string;
 }
 
-export interface AgentDescriptor { id: AgentKind; label: string; command: string; available: boolean }
-export interface RuntimeHealth { ok: boolean; version: number; cwd: string; dataRoot: string; agents: AgentDescriptor[] }
+export interface AgentDescriptor {
+  id: AgentKind;
+  label: string;
+  command: string;
+  available: boolean;
+}
+export interface RuntimeHealth {
+  ok: boolean;
+  version: number;
+  cwd: string;
+  dataRoot: string;
+  agents: AgentDescriptor[];
+}

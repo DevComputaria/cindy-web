@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.13
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run docs:check
+      - name: DCO
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-dco.mjs "${{ github.event.pull_request.base.sha }}" HEAD
+
+  unit:
+    name: Unit (${{ matrix.os }}, Node ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: 22.13
+          - os: ubuntu-latest
+            node: 24
+          - os: macos-latest
+            node: 22.13
+          - os: windows-latest
+            node: 22.13
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage
+
+  runtime-smoke:
+    name: Runtime integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.13
+          cache: npm
+      - run: npm ci
+      - run: chmod +x scripts/fixtures/fake-codex.mjs
+      - run: npm run build
+      - run: npm run test:integration
+
+  security:
+    name: Dependency security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.13
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+
+  verify:
+    name: Verify
+    if: always()
+    needs: [quality, unit, runtime-smoke, security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every gate
+        env:
+          QUALITY: ${{ needs.quality.result }}
+          UNIT: ${{ needs.unit.result }}
+          RUNTIME_SMOKE: ${{ needs.runtime-smoke.result }}
+          SECURITY: ${{ needs.security.result }}
+        run: test "$QUALITY" = success && test "$UNIT" = success && test "$RUNTIME_SMOKE" = success && test "$SECURITY" = success

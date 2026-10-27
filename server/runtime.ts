@@ -22,8 +22,12 @@ export class AgentRuntime {
 
   constructor(readonly db: CindyDatabase) {}
 
-  catalog() { return agentCatalog(); }
-  isRunning(taskId: string) { return this.active.has(taskId); }
+  catalog() {
+    return agentCatalog();
+  }
+  isRunning(taskId: string) {
+    return this.active.has(taskId);
+  }
 
   subscribe(taskId: string, listener: (event: RunEvent) => void): () => void {
     const listeners = this.subscribers.get(taskId) ?? new Set();
@@ -47,18 +51,54 @@ export class AgentRuntime {
     const descriptor = this.catalog().find((item) => item.id === task.agent);
     if (!descriptor?.available) throw new Error('AGENT_UNAVAILABLE');
 
-    const child = startAgent(task.agent, task.cwd, content, task.nativeSessionId);
     const createdAt = new Date().toISOString();
-    const user = this.db.addMessage({ id: randomUUID(), taskId, role: 'user', content, createdAt, pending: false, error: false });
-    const assistant = this.db.addMessage({ id: randomUUID(), taskId, role: 'assistant', content: '', createdAt: new Date(Date.now() + 1).toISOString(), pending: true, error: false });
-    if (task.title === 'Nova tarefa') this.db.updateTask(taskId, { title: content.slice(0, 48) || 'Nova tarefa' });
+    const user = this.db.addMessage({
+      id: randomUUID(),
+      taskId,
+      role: 'user',
+      content,
+      createdAt,
+      pending: false,
+      error: false,
+    });
+    const assistant = this.db.addMessage({
+      id: randomUUID(),
+      taskId,
+      role: 'assistant',
+      content: '',
+      createdAt: new Date(Date.now() + 1).toISOString(),
+      pending: true,
+      error: false,
+    });
+    if (task.title === 'Nova tarefa')
+      this.db.updateTask(taskId, { title: content.slice(0, 48) || 'Nova tarefa' });
     this.emit(taskId, { type: 'message', taskId, data: user });
     this.emit(taskId, { type: 'message', taskId, data: assistant });
 
-    const run: ActiveRun = { id: randomUUID(), taskId, messageId: assistant.id, child, interrupted: false, output: '', stderr: '' };
+    const child = startAgent(task.agent, task.cwd, content, task.nativeSessionId);
+    const run: ActiveRun = {
+      id: randomUUID(),
+      taskId,
+      messageId: assistant.id,
+      child,
+      interrupted: false,
+      output: '',
+      stderr: '',
+    };
     this.active.set(taskId, run);
-    this.db.createRun({ id: run.id, taskId, agent: task.agent, pid: child.pid ?? 0, command: descriptor.command, startedAt: new Date().toISOString() });
-    this.emit(taskId, { type: 'run', taskId, data: { status: 'running', agent: task.agent, pid: child.pid } });
+    this.db.createRun({
+      id: run.id,
+      taskId,
+      agent: task.agent,
+      pid: child.pid ?? 0,
+      command: descriptor.command,
+      startedAt: new Date().toISOString(),
+    });
+    this.emit(taskId, {
+      type: 'run',
+      taskId,
+      data: { status: 'running', agent: task.agent, pid: child.pid },
+    });
 
     let stdoutBuffer = '';
     child.stdout.setEncoding('utf8');
@@ -69,12 +109,15 @@ export class AgentRuntime {
       for (const line of lines) this.consumeLine(run, task.agent, line);
     });
     child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (chunk: string) => { run.stderr = (run.stderr + chunk).slice(-8_000); });
+    child.stderr.on('data', (chunk: string) => {
+      run.stderr = (run.stderr + chunk).slice(-8_000);
+    });
     child.on('error', (error) => this.finalize(run, 'failed', null, error.message));
     child.on('close', (code, signal) => {
       if (stdoutBuffer) this.consumeLine(run, task.agent, stdoutBuffer);
       const status = run.interrupted ? 'interrupted' : code === 0 ? 'completed' : 'failed';
-      const error = status === 'failed' ? run.stderr.trim() || `Agent exited with ${signal ?? code}.` : undefined;
+      const error =
+        status === 'failed' ? run.stderr.trim() || `Agent exited with ${signal ?? code}.` : undefined;
       this.finalize(run, status, code, error);
     });
     return { user, assistant };
@@ -85,22 +128,29 @@ export class AgentRuntime {
     if (!run) return false;
     run.interrupted = true;
     run.child.kill('SIGINT');
-    const timer = setTimeout(() => { if (this.active.get(taskId) === run) run.child.kill('SIGTERM'); }, 3_000);
+    const timer = setTimeout(() => {
+      if (this.active.get(taskId) === run) run.child.kill('SIGTERM');
+    }, 3_000);
     timer.unref();
     return true;
   }
 
   async shutdown(): Promise<void> {
     const runs = [...this.active.values()];
-    await Promise.all(runs.map((run) => new Promise<void>((resolve) => {
-      run.child.once('close', () => resolve());
-      this.interrupt(run.taskId);
-      const timeout = setTimeout(() => {
-        if (this.active.get(run.taskId) === run) run.child.kill('SIGKILL');
-        resolve();
-      }, 5_000);
-      timeout.unref();
-    })));
+    await Promise.all(
+      runs.map(
+        (run) =>
+          new Promise<void>((resolve) => {
+            run.child.once('close', () => resolve());
+            this.interrupt(run.taskId);
+            const timeout = setTimeout(() => {
+              if (this.active.get(run.taskId) === run) run.child.kill('SIGKILL');
+              resolve();
+            }, 5_000);
+            timeout.unref();
+          }),
+      ),
+    );
   }
 
   private consumeLine(run: ActiveRun, agent: 'codex' | 'claude' | 'hermes', line: string): void {
@@ -108,19 +158,37 @@ export class AgentRuntime {
     if (sessionId) this.db.setNativeSession(run.taskId, sessionId);
     const text = parseAgentLine(agent, line);
     if (!text) return;
-    if ((agent === 'codex' || agent === 'claude') && run.output && text.startsWith(run.output)) run.output = text;
+    if ((agent === 'codex' || agent === 'claude') && run.output && text.startsWith(run.output))
+      run.output = text;
     else run.output += text;
     this.db.updateMessage(run.messageId, { content: run.output });
-    this.emit(run.taskId, { type: 'message', taskId: run.taskId, data: { id: run.messageId, content: run.output, pending: true, error: false } });
+    this.emit(run.taskId, {
+      type: 'message',
+      taskId: run.taskId,
+      data: { id: run.messageId, content: run.output, pending: true, error: false },
+    });
   }
 
-  private finalize(run: ActiveRun, status: 'completed' | 'failed' | 'interrupted', code: number | null, error?: string): void {
+  private finalize(
+    run: ActiveRun,
+    status: 'completed' | 'failed' | 'interrupted',
+    code: number | null,
+    error?: string,
+  ): void {
     if (this.active.get(run.taskId) !== run) return;
     this.active.delete(run.taskId);
-    const content = run.output || (status === 'interrupted' ? 'Execução interrompida.' : error || 'O agente terminou sem produzir texto.');
+    const content =
+      run.output ||
+      (status === 'interrupted'
+        ? 'Execução interrompida.'
+        : error || 'O agente terminou sem produzir texto.');
     this.db.updateMessage(run.messageId, { content, pending: false, error: status === 'failed' });
     this.db.finishRun(run.id, status, code, error);
-    this.emit(run.taskId, { type: 'message', taskId: run.taskId, data: { id: run.messageId, content, pending: false, error: status === 'failed' } });
+    this.emit(run.taskId, {
+      type: 'message',
+      taskId: run.taskId,
+      data: { id: run.messageId, content, pending: false, error: status === 'failed' },
+    });
     this.emit(run.taskId, { type: 'run', taskId: run.taskId, data: { status, exitCode: code, error } });
   }
 

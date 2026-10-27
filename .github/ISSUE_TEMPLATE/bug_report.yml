@@ -1,0 +1,34 @@
+name: Bug report
+description: Relate um comportamento reproduzível do Cindy Web.
+title: '[Bug] '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Não publique tokens, prompts privados ou caminhos sensíveis.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Comportamento atual
+      description: O que aconteceu e qual era o resultado esperado?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reprodução mínima
+      description: Passos, agente selecionado e mensagens de erro sanitizadas.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Ambiente
+      description: SO, versão do Node, browser e versão do CLI.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnóstico
+      description: Saída sanitizada de npm run doctor e logs relevantes.

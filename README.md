@@ -1,90 +1,125 @@
 # Cindy Web
 
-Uma reconstrução web-first do fluxo principal do [Cindy](https://github.com/makecindy/cindy), orientada por análise estática com [REA](https://github.com/morluto/rea).
+Interface web local para orquestrar agentes de programação no computador do usuário. É um porte web-first do [Cindy](https://github.com/makecindy/cindy), orientado pela análise do [REA](https://github.com/morluto/rea), sem Electron, preload ou IPC.
 
-O produto usa uma interface 100% web conectada a um runtime local em Node.js. O runtime preserva o que importa para orquestrar trabalho real no computador: processos de agentes, SQLite, histórico de execuções e acesso ao filesystem. Electron, preload e IPC não fazem parte da aplicação.
+O navegador cuida da experiência; um servidor Node.js em loopback mantém processos, filesystem, SQLite e sessões nativas de Codex, Claude Code e Hermes. Portanto, “100% web” descreve a interface e o protocolo, não transfere execução privilegiada para um servidor remoto.
 
-## Recursos implementados
+## Estado atual
 
-- tarefas e mensagens persistidas em SQLite;
-- processos locais persistentes de Codex, Claude Code e Hermes;
-- streaming de eventos enquanto o agente trabalha;
-- interrupção de execuções e recuperação do histórico após recarregar a página;
-- pastas de trabalho reais e anexos de texto;
-- Markdown, tabelas e blocos de código;
-- tema claro, escuro ou do sistema;
-- layout responsivo e acessível;
-- PWA instalável servida pelo runtime local.
+- tarefas, mensagens, execuções e sessões de agente persistidas em SQLite;
+- processos locais desacoplados do ciclo de vida da aba;
+- continuação de sessão com `codex exec resume` e `claude --resume`;
+- eventos em tempo real por Server-Sent Events (SSE) e interrupção de execução;
+- diretórios de trabalho reais e anexos de texto;
+- Markdown, tabelas, código, temas claro/escuro e layout responsivo;
+- PWA instalável, servida pelo próprio runtime;
+- migrations versionadas, testes unitários, cobertura e smoke test ponta a ponta.
 
 ## Arquitetura
 
 ```text
-Navegador/PWA ── HTTP + SSE ──> runtime local (127.0.0.1)
-                                  ├─ SQLite: tarefas, mensagens e execuções
-                                  ├─ filesystem: workdirs reais
-                                  └─ processos: Codex / Claude Code / Hermes
+Navegador / PWA
+  └─ HTTP JSON + SSE em 127.0.0.1
+       └─ runtime Node.js
+            ├─ SQLite: tarefas, mensagens, runs e migrations
+            ├─ filesystem: workdirs escolhidos pelo usuário
+            └─ subprocessos sem shell: Codex / Claude Code / Hermes
 ```
 
-Fechar ou recarregar a página não encerra o agente. O processo pertence ao runtime local, e sua saída continua sendo gravada no SQLite. Reiniciar o próprio runtime marca execuções que estavam ativas como interrompidas; não inventa continuidade quando o vínculo com o processo foi perdido.
+Fechar ou recarregar a página não encerra um agente: o processo pertence ao runtime. Reiniciar o runtime interrompe subprocessos e marca no banco qualquer `run` que tenha ficado como ativo. A sessão nativa do agente é preservada para o próximo turno, mas nunca se afirma que um processo perdido continua executando.
 
-## Executar
+Veja [arquitetura](docs/architecture.md), [agentes](docs/agents.md), [persistência](docs/database-and-migrations.md) e [segurança](docs/security.md).
 
-Requer Node.js 22.13 ou superior e pelo menos um CLI autenticado no `PATH`: `codex`, `claude` ou `hermes`.
+## Requisitos e início rápido
+
+- Node.js 22.13 ou superior;
+- npm;
+- ao menos um CLI instalado, autenticado e disponível no `PATH`: `codex`, `claude` ou `hermes`.
 
 ```bash
-npm install
+npm ci
+npm run doctor
 npm run build
 npm start
 ```
 
-Abra `http://127.0.0.1:4317`. Para desenvolvimento com rebuild automático da interface, use `npm run dev:web` em outro terminal e mantenha o runtime ativo; a execução integrada padrão é `npm run dev`.
+Abra `http://127.0.0.1:4317`. O servidor entrega tanto a interface compilada quanto `/api/*`; não é necessário executar outro backend.
 
-Validação:
+Para desenvolvimento:
 
 ```bash
-npm test
-npm run typecheck
-npm run build
+npm run dev       # compila e executa o runtime integrado
+npm run dev:web   # Vite isolado, útil para trabalhar somente na interface
 ```
 
-## Agentes locais
+`dev:web` não substitui o runtime local. Fluxos reais de tarefas devem ser validados com o servidor integrado.
 
-O runtime detecta os executáveis com `--version` e usa as autenticações já mantidas por cada CLI. Nenhuma credencial do agente é copiada para o banco do Cindy Web.
+## Servidor local
 
-- Codex: `codex exec --json`
-- Claude Code: `claude -p --verbose --output-format stream-json`
-- Hermes: `hermes chat --prompt`
+O entrypoint de produção é `server-dist/index.js`, gerado de `server/index.ts`. Ele escuta somente em `127.0.0.1`, serve `dist/`, aplica cabeçalhos de segurança, valida `Origin` em `/api/*` e limita corpos JSON a 2 MB.
 
-Comandos podem ser substituídos por `CINDY_CODEX_COMMAND`, `CINDY_CLAUDE_COMMAND` e `CINDY_HERMES_COMMAND`. Para uma instalação Hermes com argumentos diferentes, `CINDY_HERMES_ARGS` aceita um array JSON; `{prompt}` e `{session}` são substituídos sem invocar shell.
+### Configuração
 
-O identificador nativo emitido por cada agente fica associado à tarefa. Turnos seguintes usam `codex exec resume` ou `claude --resume`; trocar o agente ou a pasta de trabalho limpa esse vínculo para evitar retomar uma sessão no contexto errado.
+| Variável               | Padrão                         | Uso                                         |
+| ---------------------- | ------------------------------ | ------------------------------------------- |
+| `CINDY_WEB_PORT`       | `4317`                         | porta HTTP de loopback                      |
+| `CINDY_WEB_DATA_DIR`   | diretório de estado do SO      | banco SQLite e arquivos futuros do runtime  |
+| `CINDY_CODEX_COMMAND`  | `codex`                        | executável do Codex                         |
+| `CINDY_CLAUDE_COMMAND` | `claude`                       | executável do Claude Code                   |
+| `CINDY_HERMES_COMMAND` | `hermes`                       | executável do Hermes                        |
+| `CINDY_HERMES_ARGS`    | `['chat', '--prompt', prompt]` | array JSON; aceita `{prompt}` e `{session}` |
 
-## O que “100% web” muda
+Exemplo em [config/runtime.env.example](config/runtime.env.example). O projeto não carrega `.env` automaticamente: exporte as variáveis no processo, use seu gerenciador de serviços ou `node --env-file`.
 
-O Cindy Desktop usa Renderer React, preload/bridge e processo Electron principal. Este porte mantém os fluxos de interface, mas substitui as fronteiras nativas:
+### API v1
 
-| Cindy Desktop | Cindy Web |
-| --- | --- |
-| Electron IPC / preload | HTTP local e Server-Sent Events |
-| SQLite e filesystem local | SQLite e filesystem mantidos no runtime local |
-| processos locais de Agent | processos Codex, Claude Code e Hermes mantidos pelo runtime |
-| atualizador desktop | service worker/PWA |
-| janelas auxiliares | painéis e rotas web responsivas |
+| Método   | Rota                       | Responsabilidade                                        |
+| -------- | -------------------------- | ------------------------------------------------------- |
+| `GET`    | `/api/health`              | versão, diretórios e agentes detectados                 |
+| `GET`    | `/api/tasks`               | tarefas com mensagens e estado transitório `running`    |
+| `POST`   | `/api/tasks`               | cria tarefa após validar workdir e agente               |
+| `PATCH`  | `/api/tasks/:id`           | altera título, projeto, workdir, agente ou arquivamento |
+| `DELETE` | `/api/tasks/:id`           | remove tarefa e dependências, se não estiver executando |
+| `POST`   | `/api/tasks/:id/messages`  | persiste o turno e inicia o agente (`202`)              |
+| `POST`   | `/api/tasks/:id/interrupt` | envia interrupção ao processo ativo                     |
+| `GET`    | `/api/tasks/:id/events`    | stream SSE de mensagens e lifecycle da execução         |
 
-O runtime escuta exclusivamente em `127.0.0.1`, valida a origem do navegador e inicia processos com `shell: false`. Os agentes continuam executando com as permissões normais do usuário; a pasta de trabalho não é um sandbox de sistema operacional.
+Erros usam `{ "error": { "code": "...", "message": "..." } }`. Uma tarefa aceita no máximo uma execução concorrente. A API ainda é local e sem autenticação; expô-la na LAN ou internet não é suportado.
 
-## Dados
-
-Use `CINDY_WEB_DATA_DIR` para escolher o diretório do banco. Sem configuração explícita:
+### Dados
 
 - Linux: `$XDG_STATE_HOME/cindy-web` ou `~/.local/state/cindy-web`;
 - macOS: `~/Library/Application Support/CindyWeb`;
 - Windows: `%APPDATA%/CindyWeb`.
 
-## Proveniência
+O banco é `cindy-web.sqlite3`, usa WAL, foreign keys e migrations append-only. Para backup consistente, pare o runtime e copie o diretório inteiro. Preferências visuais não sensíveis ficam no `localStorage`; histórico e estado operacional não ficam no navegador.
 
-Este projeto é derivado conceitualmente do Cindy, licenciado sob Apache-2.0. Consulte [NOTICE](NOTICE) e [docs/rea-analysis.md](docs/rea-analysis.md).
+## Qualidade e contribuição
 
-## Licença
+```bash
+npm run check            # gate local completo
+npm test                 # testes rápidos
+npm run test:coverage    # testes + limites de cobertura
+npm run test:integration # API, segurança, processo, resume e restart
+npm run lint
+npm run typecheck
+npm run dco:install-hook # assinatura automática de novos commits
+```
 
-Apache License 2.0.
+Todo commit deve usar DCO (`git commit -s`). Consulte [AGENTS.md](AGENTS.md), [desenvolvimento](docs/development.md) e [estratégia de testes](docs/testing.md).
+
+## Cindy Desktop → Cindy Web
+
+| Cindy Desktop                       | Cindy Web                                                |
+| ----------------------------------- | -------------------------------------------------------- |
+| Electron IPC / preload              | HTTP local e SSE                                         |
+| SQLite e filesystem no main process | SQLite e filesystem no runtime Node local                |
+| processos locais de Agent           | subprocessos locais persistentes no runtime              |
+| atualizador desktop                 | service worker/PWA; distribuição do runtime ainda manual |
+| janelas auxiliares                  | painéis responsivos na mesma aplicação                   |
+
+Este repositório não baixa nem redistribui CLIs de terceiros. Cada agente usa sua própria instalação e autenticação; credenciais não entram no banco do Cindy Web.
+
+## Proveniência e licença
+
+Derivado conceitualmente do Cindy, sob Apache-2.0. Consulte [NOTICE](NOTICE), [análise REA](docs/rea-analysis.md) e [LICENSE](LICENSE).

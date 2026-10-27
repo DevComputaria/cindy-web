@@ -27,10 +27,8 @@ export default defineConfig({
         theme_color: '#f8f8f6',
         background_color: '#f8f8f6',
         display: 'standalone',
-        icons: [
-          { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }
-        ]
-      }
-    })
-  ]
+        icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
+      },
+    }),
+  ],
 });
