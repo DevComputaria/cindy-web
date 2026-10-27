@@ -1,122 +1,118 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Chat } from './components/Chat';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Sidebar } from './components/Sidebar';
 import { Welcome } from './components/Welcome';
-import { mockChat, streamChat } from './lib/ai';
-import { createTask, loadState, saveState } from './lib/store';
-import type { AppState, Attachment, Message, Preferences } from './types';
-
-function now() {
-  return new Date().toISOString();
-}
+import { localApi } from './lib/api';
+import { loadPreferences, savePreferences } from './lib/store';
+import type { Attachment, Message, Preferences, RuntimeHealth, Task } from './types';
 
 export function App() {
-  const [state, setState] = useState<AppState>(loadState);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<Preferences>(loadPreferences);
+  const [health, setHealth] = useState<RuntimeHealth | null>(null);
+  const [runtimeError, setRuntimeError] = useState('');
+  const [sending, setSending] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const pendingPromptRef = useRef<string | null>(null);
 
-  const activeTask = useMemo(() => state.tasks.find((task) => task.id === state.activeTaskId) ?? null, [state]);
+  const activeTask = useMemo(() => tasks.find((task) => task.id === activeTaskId) ?? null, [tasks, activeTaskId]);
+  const loadTasks = useCallback(async () => {
+    const next = await localApi.tasks();
+    setTasks(next);
+    return next;
+  }, []);
 
-  useEffect(() => saveState(state), [state]);
+  useEffect(() => {
+    Promise.all([localApi.health(), loadTasks()]).then(([runtime, nextTasks]) => {
+      setHealth(runtime);
+      setRuntimeError('');
+      if (!activeTaskId && nextTasks.length) setActiveTaskId(nextTasks[0].id);
+    }).catch((error: Error) => setRuntimeError(error.message));
+  }, []);
+
+  useEffect(() => savePreferences(preferences), [preferences]);
   useEffect(() => {
     const root = document.documentElement;
-    const dark = state.preferences.theme === 'dark' || (state.preferences.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    const dark = preferences.theme === 'dark' || (preferences.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
     root.dataset.theme = dark ? 'dark' : 'light';
-  }, [state.preferences.theme]);
+  }, [preferences.theme]);
 
-  const updateTask = (taskId: string, updater: (task: AppState['tasks'][number]) => AppState['tasks'][number]) => {
-    setState((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === taskId ? updater(task) : task) }));
+  useEffect(() => {
+    if (!activeTaskId) return;
+    const events = new EventSource(`/api/tasks/${activeTaskId}/events`);
+    events.addEventListener('message', (raw) => {
+      const patch = JSON.parse((raw as MessageEvent).data) as Partial<Message> & { id: string };
+      setTasks((current) => current.map((task) => task.id !== activeTaskId ? task : {
+        ...task,
+        messages: task.messages.some((message) => message.id === patch.id)
+          ? task.messages.map((message) => message.id === patch.id ? { ...message, ...patch } : message)
+          : [...task.messages, patch as Message],
+      }));
+    });
+    events.addEventListener('run', (raw) => {
+      const event = JSON.parse((raw as MessageEvent).data) as { status: string };
+      setTasks((current) => current.map((task) => task.id === activeTaskId ? { ...task, running: event.status === 'running' } : task));
+      if (event.status !== 'running') setSending(false);
+    });
+    events.onerror = () => { if (events.readyState === EventSource.CLOSED) setRuntimeError('Conexão com o runtime local foi encerrada.'); };
+    return () => events.close();
+  }, [activeTaskId]);
+
+  const createTask = async (prompt?: string) => {
+    if (!health) return;
+    try {
+      const selected = health.agents.find((agent) => agent.id === preferences.defaultAgent && agent.available)
+        ?? health.agents.find((agent) => agent.available);
+      if (!selected) throw new Error('Instale Codex, Claude Code ou Hermes e reinicie o runtime.');
+      const task = await localApi.createTask({ cwd: health.cwd, project: health.cwd.split(/[\\/]/).filter(Boolean).at(-1), agent: selected.id });
+      setTasks((current) => [task, ...current]);
+      setActiveTaskId(task.id);
+      if (prompt) {
+        setSending(true);
+        await localApi.send(task.id, prompt);
+        await loadTasks();
+      }
+    } catch (error) { setRuntimeError((error as Error).message); setSending(false); }
   };
 
-  const newTask = (prompt?: string) => {
-    const task = createTask();
-    pendingPromptRef.current = prompt ?? null;
-    setState((current) => ({ ...current, tasks: [task, ...current.tasks], activeTaskId: task.id }));
+  const updateTask = async (id: string, patch: Partial<Pick<Task, 'title' | 'project' | 'cwd' | 'agent'>>) => {
+    try {
+      const task = await localApi.updateTask(id, patch);
+      setTasks((current) => current.map((item) => item.id === id ? { ...item, ...task } : item));
+    } catch (error) { setRuntimeError((error as Error).message); }
   };
 
   const sendMessage = async (text: string, attachments: Attachment[]) => {
-    if (!activeTask || busy) return;
-    const taskId = activeTask.id;
-    const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: text, attachments, createdAt: now() };
-    const assistantId = crypto.randomUUID();
-    const assistantMessage: Message = { id: assistantId, role: 'assistant', content: '', createdAt: now(), pending: true };
-    const title = activeTask.messages.length === 0 ? text.slice(0, 48) || attachments[0]?.name || 'Nova tarefa' : activeTask.title;
-    const history = [...activeTask.messages, userMessage];
-    updateTask(taskId, (task) => ({ ...task, title, updatedAt: now(), messages: [...history, assistantMessage] }));
-    setBusy(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const appendToken = (token: string) => updateTask(taskId, (task) => ({
-      ...task,
-      messages: task.messages.map((message) => message.id === assistantId ? { ...message, content: message.content + token } : message),
-    }));
-
+    if (!activeTask || activeTask.running || sending) return;
+    const attachmentText = attachments.length
+      ? `\n\nArquivos anexados pelo usuário:\n${attachments.map((file) => `--- ${file.name} ---\n${file.text ?? '[arquivo binário não incluído]'}`).join('\n')}`
+      : '';
+    setSending(true);
     try {
-      const apiKey = sessionStorage.getItem('cindy-web:api-key') ?? '';
-      if (apiKey) {
-        await streamChat({ endpoint: state.preferences.endpoint, model: state.preferences.model, apiKey, messages: history, signal: controller.signal, onToken: appendToken });
-      } else {
-        await mockChat(text, controller.signal, appendToken);
-      }
-      updateTask(taskId, (task) => ({ ...task, updatedAt: now(), messages: task.messages.map((message) => message.id === assistantId ? { ...message, pending: false } : message) }));
-    } catch (error) {
-      if ((error as DOMException).name === 'AbortError') {
-        updateTask(taskId, (task) => ({ ...task, messages: task.messages.map((message) => message.id === assistantId ? { ...message, pending: false, content: message.content || 'Resposta interrompida.' } : message) }));
-      } else {
-        const details = error instanceof Error ? error.message : 'Falha desconhecida';
-        updateTask(taskId, (task) => ({ ...task, messages: task.messages.map((message) => message.id === assistantId ? { ...message, pending: false, error: true, content: `Não foi possível falar com o modelo.\n\n${details}` } : message) }));
-      }
-    } finally {
-      abortRef.current = null;
-      setBusy(false);
-    }
+      await localApi.send(activeTask.id, `${text}${attachmentText}`);
+      await loadTasks();
+    } catch (error) { setRuntimeError((error as Error).message); setSending(false); }
   };
 
-  useEffect(() => {
-    if (activeTask && pendingPromptRef.current && activeTask.messages.length === 0) {
-      const prompt = pendingPromptRef.current;
-      pendingPromptRef.current = null;
-      void sendMessage(prompt, []);
-    }
-  }, [activeTask?.id]);
-
-  const updatePreferences = (preferences: Preferences) => setState((current) => ({ ...current, preferences }));
+  const updatePreferences = (next: Preferences) => { setPreferences(next); savePreferences(next); };
+  const agentLabel = health?.agents.find((agent) => agent.id === activeTask?.agent)?.label ?? activeTask?.agent ?? '';
 
   return (
     <div className="app-shell">
-      <Sidebar
-        tasks={state.tasks}
-        activeTaskId={state.activeTaskId}
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed((value) => !value)}
-        onSelect={(id) => setState((current) => ({ ...current, activeTaskId: id }))}
-        onNew={() => newTask()}
-        onSettings={() => setSettingsOpen(true)}
-      />
+      <Sidebar tasks={tasks} activeTaskId={activeTaskId} collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((value) => !value)}
+        onSelect={setActiveTaskId} onNew={() => void createTask()} onSettings={() => setSettingsOpen(true)} />
+      {runtimeError && <div className="runtime-banner" role="alert"><strong>Runtime local:</strong> {runtimeError}<button onClick={() => { setRuntimeError(''); void loadTasks(); }}>Tentar novamente</button></div>}
       {activeTask ? (
-        <Chat
-          task={activeTask}
-          busy={busy}
-          model={sessionStorage.getItem('cindy-web:api-key') ? state.preferences.model : 'Demonstração'}
-          onRename={() => {
-            const title = window.prompt('Nome da tarefa', activeTask.title)?.trim();
-            if (title) updateTask(activeTask.id, (task) => ({ ...task, title }));
-          }}
-          onDelete={() => {
-            if (!window.confirm('Excluir esta tarefa deste navegador?')) return;
-            setState((current) => ({ ...current, tasks: current.tasks.filter((task) => task.id !== activeTask.id), activeTaskId: null }));
-          }}
-          onProject={(project) => updateTask(activeTask.id, (task) => ({ ...task, project }))}
-          onSend={sendMessage}
-          onStop={() => abortRef.current?.abort()}
-        />
-      ) : <Welcome onNew={newTask} />}
-      {settingsOpen && <SettingsPanel preferences={state.preferences} onChange={updatePreferences} onClose={() => setSettingsOpen(false)} />}
+        <Chat task={activeTask} busy={activeTask.running || sending} agent={agentLabel}
+          onRename={() => { const title = window.prompt('Nome da tarefa', activeTask.title)?.trim(); if (title) void updateTask(activeTask.id, { title }); }}
+          onDelete={() => { if (window.confirm('Excluir esta tarefa e o histórico local?')) void localApi.deleteTask(activeTask.id).then(() => { setTasks((current) => current.filter((task) => task.id !== activeTask.id)); setActiveTaskId(null); }); }}
+          onCwd={(cwd) => void updateTask(activeTask.id, { cwd, project: cwd.split(/[\\/]/).filter(Boolean).at(-1) || activeTask.project })}
+          onSend={sendMessage} onStop={() => void localApi.interrupt(activeTask.id)} />
+      ) : <Welcome onNew={(prompt) => void createTask(prompt)} />}
+      {settingsOpen && <SettingsPanel preferences={preferences} agents={health?.agents ?? []} dataRoot={health?.dataRoot}
+        onChange={updatePreferences} onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

@@ -1,18 +1,18 @@
 import { ArrowUp, FileText, FolderOpen, Paperclip, Square, X } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { filesToAttachments, pickProjectName } from '../lib/files';
+import { filesToAttachments } from '../lib/files';
 import type { Attachment } from '../types';
 
 interface ComposerProps {
   busy: boolean;
-  project: string;
-  model: string;
-  onProject: (project: string) => void;
+  cwd: string;
+  agent: string;
+  onCwd: (cwd: string) => void;
   onSend: (text: string, attachments: Attachment[]) => void;
   onStop: () => void;
 }
 
-export function Composer({ busy, project, model, onProject, onSend, onStop }: ComposerProps) {
+export function Composer({ busy, cwd, agent, onCwd, onSend, onStop }: ComposerProps) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -68,21 +68,13 @@ export function Composer({ busy, project, model, onProject, onSend, onStop }: Co
           <button className="tool-button" onClick={() => fileInput.current?.click()} title="Anexar arquivos">
             <Paperclip size={16} />
           </button>
-          <button
-            className="project-pill"
-            onClick={async () => {
-              try {
-                const name = await pickProjectName();
-                if (name) onProject(name);
-                else onProject(window.prompt('Nome do projeto', project) || project);
-              } catch (error) {
-                if ((error as DOMException).name !== 'AbortError') console.error(error);
-              }
-            }}
-          >
-            <FolderOpen size={14} /> {project}
+          <button className="project-pill" onClick={() => {
+            const next = window.prompt('Caminho absoluto da pasta de trabalho', cwd)?.trim();
+            if (next) onCwd(next);
+          }} title={cwd}>
+            <FolderOpen size={14} /> {cwd}
           </button>
-          <span className="model-label">{model}</span>
+          <span className="model-label">{agent}</span>
           {busy ? (
             <button className="send-button stop" onClick={onStop} aria-label="Interromper resposta"><Square size={13} fill="currentColor" /></button>
           ) : (

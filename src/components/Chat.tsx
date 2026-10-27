@@ -8,15 +8,15 @@ import { Composer } from './Composer';
 interface ChatProps {
   task: Task;
   busy: boolean;
-  model: string;
+  agent: string;
   onRename: () => void;
   onDelete: () => void;
-  onProject: (project: string) => void;
+  onCwd: (cwd: string) => void;
   onSend: Parameters<typeof Composer>[0]['onSend'];
   onStop: () => void;
 }
 
-export function Chat({ task, busy, model, onRename, onDelete, onProject, onSend, onStop }: ChatProps) {
+export function Chat({ task, busy, agent, onRename, onDelete, onCwd, onSend, onStop }: ChatProps) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [task.messages, busy]);
 
@@ -50,7 +50,7 @@ export function Chat({ task, busy, model, onRename, onDelete, onProject, onSend,
         ))}
         <div ref={endRef} />
       </div>
-      <Composer busy={busy} project={task.project} model={model} onProject={onProject} onSend={onSend} onStop={onStop} />
+      <Composer busy={busy} cwd={task.cwd} agent={agent} onCwd={onCwd} onSend={onSend} onStop={onStop} />
     </main>
   );
 }

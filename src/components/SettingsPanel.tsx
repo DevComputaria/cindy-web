@@ -1,9 +1,11 @@
-import { KeyRound, Monitor, Moon, ShieldCheck, Sun, X } from 'lucide-react';
+import { Bot, Database, Monitor, Moon, ShieldCheck, Sun, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { Preferences, Theme } from '../types';
+import type { AgentDescriptor, Preferences, Theme } from '../types';
 
 interface SettingsPanelProps {
   preferences: Preferences;
+  agents: AgentDescriptor[];
+  dataRoot?: string;
   onChange: (preferences: Preferences) => void;
   onClose: () => void;
 }
@@ -14,15 +16,12 @@ const themes: Array<{ value: Theme; label: string; icon: typeof Sun }> = [
   { value: 'dark', label: 'Escuro', icon: Moon },
 ];
 
-export function SettingsPanel({ preferences, onChange, onClose }: SettingsPanelProps) {
-  const [apiKey, setApiKey] = useState(() => sessionStorage.getItem('cindy-web:api-key') ?? '');
+export function SettingsPanel({ preferences, agents, dataRoot, onChange, onClose }: SettingsPanelProps) {
   const [draft, setDraft] = useState(preferences);
 
   useEffect(() => setDraft(preferences), [preferences]);
 
   const save = () => {
-    if (apiKey) sessionStorage.setItem('cindy-web:api-key', apiKey);
-    else sessionStorage.removeItem('cindy-web:api-key');
     onChange(draft);
     onClose();
   };
@@ -48,11 +47,21 @@ export function SettingsPanel({ preferences, onChange, onClose }: SettingsPanelP
           </section>
 
           <section className="setting-section">
-            <div className="section-title"><KeyRound size={17} /><div><h3>Modelo</h3><p>API compatível com OpenAI</p></div></div>
-            <label>Endpoint<input value={draft.endpoint} onChange={(event) => setDraft({ ...draft, endpoint: event.target.value })} placeholder="https://api.openai.com/v1" /></label>
-            <label>Modelo<input value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })} placeholder="gpt-4.1-mini" /></label>
-            <label>Chave da API<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-…" autoComplete="off" /></label>
-            <div className="privacy-note"><ShieldCheck size={16} /><span>A chave fica apenas em <strong>sessionStorage</strong> e é apagada ao encerrar a sessão do navegador. O provedor precisa aceitar CORS.</span></div>
+            <div className="section-title"><Bot size={17} /><div><h3>Agente local padrão</h3><p>Usado ao criar novas tarefas</p></div></div>
+            <div className="agent-options">
+              {agents.map((agent) => (
+                <button key={agent.id} disabled={!agent.available} className={draft.defaultAgent === agent.id ? 'active' : ''} onClick={() => setDraft({ ...draft, defaultAgent: agent.id })}>
+                  <span className={`status-dot ${agent.available ? 'online' : ''}`} />
+                  <span><strong>{agent.label}</strong><small>{agent.available ? agent.command : 'Não encontrado no PATH'}</small></span>
+                </button>
+              ))}
+            </div>
+            <div className="privacy-note"><ShieldCheck size={16} /><span>O runtime escuta apenas em <strong>127.0.0.1</strong>. Agentes executam com as permissões do seu usuário dentro da pasta escolhida.</span></div>
+          </section>
+
+          <section className="setting-section">
+            <div className="section-title"><Database size={17} /><div><h3>Persistência local</h3><p>SQLite e histórico de execuções</p></div></div>
+            <code className="data-path">{dataRoot ?? 'Runtime indisponível'}</code>
           </section>
 
           <section className="setting-section">

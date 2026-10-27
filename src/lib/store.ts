@@ -1,56 +1,28 @@
-import type { AppState, Preferences, Task } from '../types';
+import type { Preferences } from '../types';
 
-export const STORAGE_KEY = 'cindy-web:v1';
+export const STORAGE_KEY = 'cindy-web:ui:v2';
 
 export const defaultPreferences: Preferences = {
   theme: 'system',
-  endpoint: 'https://api.openai.com/v1',
-  model: 'gpt-4.1-mini',
+  defaultAgent: 'codex',
   displayName: 'Você',
 };
 
-export const defaultState: AppState = {
-  version: 1,
-  tasks: [],
-  activeTaskId: null,
-  preferences: defaultPreferences,
-};
-
-export function createTask(project = 'Meu espaço'): Task {
-  const now = new Date().toISOString();
-  return {
-    id: crypto.randomUUID(),
-    title: 'Nova tarefa',
-    project,
-    createdAt: now,
-    updatedAt: now,
-    archived: false,
-    messages: [],
-  };
+export function normalizePreferences(value: unknown): Preferences {
+  if (!value || typeof value !== 'object') return defaultPreferences;
+  const candidate = value as Partial<Preferences>;
+  const defaultAgent = candidate.defaultAgent === 'claude' || candidate.defaultAgent === 'hermes' ? candidate.defaultAgent : 'codex';
+  const theme = candidate.theme === 'light' || candidate.theme === 'dark' ? candidate.theme : 'system';
+  return { ...defaultPreferences, ...candidate, theme, defaultAgent };
 }
 
-export function normalizeState(value: unknown): AppState {
-  if (!value || typeof value !== 'object') return defaultState;
-  const candidate = value as Partial<AppState>;
-  const tasks = Array.isArray(candidate.tasks)
-    ? candidate.tasks.filter((task): task is Task => Boolean(task && typeof task.id === 'string'))
-    : [];
-  const preferences = { ...defaultPreferences, ...(candidate.preferences ?? {}) };
-  const activeTaskId = tasks.some((task) => task.id === candidate.activeTaskId)
-    ? (candidate.activeTaskId ?? null)
-    : null;
-  return { version: 1, tasks, activeTaskId, preferences };
-}
-
-export function loadState(): AppState {
+export function loadPreferences(): Preferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? normalizeState(JSON.parse(raw)) : defaultState;
-  } catch {
-    return defaultState;
-  }
+    return raw ? normalizePreferences(JSON.parse(raw)) : defaultPreferences;
+  } catch { return defaultPreferences; }
 }
 
-export function saveState(state: AppState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+export function savePreferences(preferences: Preferences): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
 }

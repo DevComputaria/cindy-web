@@ -1,4 +1,5 @@
 export type Role = 'user' | 'assistant';
+export type AgentKind = 'codex' | 'claude' | 'hermes';
 
 export interface Attachment {
   id: string;
@@ -22,24 +23,22 @@ export interface Task {
   id: string;
   title: string;
   project: string;
+  cwd: string;
+  agent: AgentKind;
   createdAt: string;
   updatedAt: string;
   archived: boolean;
   messages: Message[];
+  running: boolean;
 }
 
 export type Theme = 'system' | 'light' | 'dark';
 
 export interface Preferences {
   theme: Theme;
-  endpoint: string;
-  model: string;
+  defaultAgent: AgentKind;
   displayName: string;
 }
 
-export interface AppState {
-  version: 1;
-  tasks: Task[];
-  activeTaskId: string | null;
-  preferences: Preferences;
-}
+export interface AgentDescriptor { id: AgentKind; label: string; command: string; available: boolean }
+export interface RuntimeHealth { ok: boolean; version: number; cwd: string; dataRoot: string; agents: AgentDescriptor[] }

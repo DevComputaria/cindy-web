@@ -30,10 +30,10 @@ O worker encerrou antes da resposta terminal, retornando `unreadable_output`. A 
 ## Decisões de porte
 
 1. O Renderer React e o sistema de rotas são reconstruídos como uma SPA/PWA.
-2. O preload e o IPC não entram no bundle web. Seus papéis viram interfaces baseadas em APIs do navegador.
-3. O estado local usa armazenamento do navegador; nenhum dado do perfil Cindy Desktop é importado.
-4. A execução de Agent local é substituída por streaming HTTP de endpoint OpenAI-compatible.
-5. Recursos sem equivalente seguro no navegador são declarados como lacunas, não simulados como concluídos.
+2. O preload e o IPC não entram no bundle web. Seus papéis viram uma API HTTP local com eventos SSE.
+3. Tarefas, mensagens e execuções continuam locais e persistentes em SQLite; preferências puramente visuais permanecem no navegador.
+4. Codex, Claude Code e Hermes continuam como processos locais pertencentes ao runtime, independentes do ciclo de vida da página.
+5. Filesystem e workdirs permanecem reais. A pasta escolhida delimita contexto, mas não é apresentada como sandbox do sistema operacional.
 
 ## Verificação complementar
 

@@ -16,9 +16,3 @@ export async function filesToAttachments(files: FileList | File[]): Promise<Atta
     }),
   );
 }
-
-export async function pickProjectName(): Promise<string | null> {
-  if (!window.showDirectoryPicker) return null;
-  const handle = await window.showDirectoryPicker();
-  return handle.name;
-}
