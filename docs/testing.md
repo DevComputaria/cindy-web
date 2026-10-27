@@ -26,6 +26,6 @@ O teste nunca usa credenciais ou rede externa. Falhas devem exibir diagnóstico 
 
 ## CI
 
-A workflow principal separa qualidade, testes multiplataforma, integração e audit de produção; um job final `verify` serve como required check estável. CodeQL roda em push, pull request e agenda. Dependabot cobre npm e GitHub Actions.
+A workflow principal separa qualidade, testes multiplataforma, integração e audit de produção; um job final `verify` serve como required check estável. O CodeQL usa o default setup já habilitado na organização, evitando uma segunda configuração incompatível. Dependabot cobre npm e GitHub Actions.
 
 Limites de cobertura são piso, não meta. Código de I/O exercitado pelo smoke pode ser excluído da métrica unitária, mas não da validação do repositório.
